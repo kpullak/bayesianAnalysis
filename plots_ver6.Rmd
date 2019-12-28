@@ -1,0 +1,192 @@
+---
+title: "ST540_Project_Political_ver1"
+author: "Vikram Patil, Krishna Pullakandam, Venkata Pasumarty"
+date: "April 27, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Urban Rural classification as a factor.
+
+## Loading Data
+
+```{r }
+county_dat <- read.csv("US_County_Level_Presidential_Results_08-16.csv")
+county_facts <- read.csv("county_facts.csv")
+county_facts_dict <- read.csv("county_facts_dictionary.csv")
+
+
+# To remove states data
+county_facts <- county_facts[county_facts[,3]!="",]
+
+```
+
+## Combing election results with county wise demographics Data
+
+```{r }
+nc<- nrow(county_facts)
+county_combined <- matrix(NA,nc,12)
+colnames(county_combined) <- colnames(county_dat)[3:14]
+
+for(j in 1:nc){
+  temp <- which(county_dat[,1] == county_facts[j,1])
+  if(length(temp)==1){
+    county_combined[j,1:12] <- as.numeric(county_dat[temp,3:14])
+    if(county_combined[j,3] > county_combined[j,1]){county_combined[j,]<-NA}
+  }
+}
+
+full_US_dat <- cbind(county_facts[,1:3],county_combined,county_facts[,4:54])
+
+```
+
+
+## Creating a factor variables for Urban vs Rural counties
+
+```{r }
+
+#install.packages("readxl")
+library("readxl")
+rural_counties <- read_excel("cfpb_rural-list_2018.xlsx")
+rural_counties$county_key <- paste(rural_counties$State , rural_counties$`County Name`)
+full_US_dat$county_key <- paste(full_US_dat$state_abbreviation, full_US_dat$area_name)
+# 0 - rural
+# 1 - urban
+full_US_dat$is_urban <- ifelse((full_US_dat$county_key %in% rural_counties$county_key), 0, 1)
+full_US_dat <- subset(full_US_dat, select = -c(county_key))
+
+
+```
+
+## Combing election results with county wise demographics Data
+
+```{r }
+
+NC_dat <- full_US_dat[full_US_dat$state_abbreviation == 'NC',]
+NC_dat_2012_16<-NC_dat[,8:ncol(full_US_dat)]
+
+colnames(NC_dat_2012_16) <- c("total_2012(1)","dem_2012(2)","gop_2012(3)","oth_2012(4)","total_2016(1)","dem_2016(2)","gop_2016(3)","oth_2016(4)","Pop 2014(5)","Pop 2010(6)","Pop per change 10 to 14(7)","Pop 2010(8)","under 5, 2014(9)","under 18, 2014(10)", "above 65, 2014(11)", "Female(12)","White(13)","Black(14)","American Indian(15)","Asian(16)","Native Hawaiian(17)","Two or More(18)","Hispanic or Latino(19)","White alone(20)","Living in same house 1 year & over(21)","Foreign born(22)","Languages(23)","High school graduate or higher (24)","Bachelor's degree (25)","Veterans (26)","travel time to work (27)","Housing units(28)","Homeownership(29)","Housing units in multi(30)","owner-occupied housing units(31)","Households(32)","Persons per household(33)","Per capita money income(34)","Median household income(35)","Persons below poverty level(36)","Private nonfarm establishments (37)","Private nonfarm employment(38)","Private nonfarm employment(39)","Nonemployer establishments(40)","Total number of firms(41)","Black firms(42)","American Indian firms(43)","Asian firms(44)","Native Hawaiian firms(45)","Hispanic-owned firms(46)","Women-owned firms(47)","Manufacturers shipments(48)","Merchant wholesaler sales(49)","Retail sales(50)","Retail sales per capita(51)","Accommodation and food(52)","Building permits(53)","Land area in square miles(54)","Population per square mile(55)","Is_Urban(56)")
+
+NC.gop_2012_16<-NC_dat_2012_16[,-c(9,10,11,12,13)]
+
+
+```
+
+
+## Correlation plot and PCA summary
+
+```{r ,fig.width = 15, fig.height=15}
+library(corrplot)
+N<-NC.gop_2012_16[,c(1,5)]
+Y<-NC.gop_2012_16[,c(3,7)]
+X<-NC.gop_2012_16[,9:ncol(NC.gop_2012_16)-1]
+X_Ufactor<-as.data.frame(NC.gop_2012_16[,ncol(NC.gop_2012_16)])
+n<-nrow(NC.gop_2012_16)
+nparam<-ncol(X)+1
+nyears<-2
+
+corrplot( cor(X), order = "hclust")
+pca.out<-prcomp(X,retx = TRUE, center = TRUE, scale = TRUE)
+summary(pca.out)
+
+n_PC<-26
+X_PCA<-pca.out$x[,1:n_PC]
+X_PCA<-as.data.frame(X_PCA)
+
+PC_loadings<-as.data.frame(pca.out$rotation[,1:n_PC])
+
+```
+
+
+## Modeling Votes for GOP
+
+```{r }
+
+votes <- read.csv("US_County_Level_Presidential_Results_08-16.csv")
+dim(votes)
+
+facts <- read.csv("county_facts.csv")
+dict  <- read.csv("county_facts_dictionary.csv")
+dim(facts)
+
+facts <- facts[facts[,3]!="",]
+dim(facts)
+
+facts[1:2,]
+dict
+
+n <- nrow(facts)
+VOTES <- matrix(NA,n,12)
+colnames(VOTES) <- colnames(votes)[3:14]
+
+for(j in 1:n){
+  these <- which(votes[,1]==facts[j,1])
+  if(length(these)==1){
+    VOTES[j,1:12] <- as.numeric(votes[these,3:14])
+    if(VOTES[j,3]>VOTES[j,1]){VOTES[j,]<-NA}
+  }
+}
+all_dat <- cbind(facts[,1:3],VOTES,facts[,4:54])
+
+rm(j,votes,facts,n,VOTES,these)
+
+dim(all_dat)
+
+all_dat[1:2,1:20]
+
+save.image("election_2008_2016.RData")
+
+pct_gop_08 <-  all_dat[,6]/all_dat[,4]
+pct_gop_12 <-  all_dat[,10]/all_dat[,8]
+pct_gop_16 <-  all_dat[,14]/all_dat[,12]
+pairs(cbind(pct_gop_08,pct_gop_12,pct_gop_16))
+
+pct_dem_08 <-  all_dat[,5]/all_dat[,4]
+pct_dem_12 <-  all_dat[,9]/all_dat[,8]
+pct_dem_16 <-  all_dat[,13]/all_dat[,12]
+pairs(cbind(pct_dem_08,pct_dem_12,pct_dem_16))
+
+fips        <- all_dat[,1]
+Y           <- 
+Y           <- round(100*(pct_gop_16/pct_gop_12-1),1)
+Z           <- round(100*(pct_dem_16/pct_dem_12-1),1)
+these       <- c(3,7,10,15,20,21,25,27,31,32,47,51,22,44:45)
+X           <- as.matrix(all_dat[,these+15])
+names       <- dict[these,]
+colnames(X) <- names[,1]
+names
+
+# Make the last few per captia
+pop <- all_dat[,16]
+for(j in 12:15){
+  X[,j]<-X[,j]/pop
+}
+n <- length(Y)
+p <- ncol(X)
+
+library(choroplethr)
+library(choroplethrMaps)
+
+county_plot<-function(fips,Y,main="",units=""){
+  temp  <- as.data.frame(list(region=fips,value=Y))
+  county_choropleth(temp,title=main,legend=units)
+}
+county_plot(fips,Y,"Percent change in GOP support from 2012 to 2016",unit="Percent increase")
+county_plot(fips,Z,"Percent change in DEM support from 2012 to 2016",unit="Percent increase")
+
+```
+
+
+## Results plot and Summary for Model1
+
+```{r ,fig.width = 15, fig.height=15}
+plot(samples1)
+summary(samples1)
+```
+
+
+
